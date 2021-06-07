@@ -6,8 +6,8 @@ defmodule Sourceror do
 
   alias Sourceror.PostwalkState
 
-  @line_fields ~w[closing do end end_of_expression]a
-  @start_fields ~w[line do]a
+  @line_fields ~w[closing last do end end_of_expression]a
+  # @start_fields ~w[line do]a
   @end_fields ~w[end closing end_of_expression]a
 
   @type postwalk_function :: (Macro.t(), PostwalkState.t() -> {Macro.t(), PostwalkState.t()})
@@ -220,37 +220,11 @@ defmodule Sourceror do
   @spec postwalk(Macro.t(), term, postwalk_function) ::
           {Macro.t(), term}
   def postwalk(quoted, acc, fun) do
-    {quoted, %{acc: acc}} =
-      Macro.traverse(quoted, %PostwalkState{acc: acc}, &postwalk_correct_lines/2, fn
-        {form, meta, args}, state ->
-          updated_ends =
-            correct_lines(meta, state.line_correction, skip: [:leading_comments] ++ @start_fields)
-
-          meta = Keyword.merge(meta, updated_ends)
-
-          {quoted, state} = fun.({form, meta, args}, state)
-          {quoted, state}
-
-        quoted, state ->
-          {quoted, state} = fun.(quoted, state)
-          {quoted, state}
-      end)
-
-    {quoted, acc}
+    Sourceror.Traversal.traverse(quoted, acc, &{&1, &2}, fun)
   end
 
-  defp postwalk_correct_lines({_, _, _} = quoted, state) do
-    quoted =
-      Macro.update_meta(
-        quoted,
-        &correct_lines(&1, state.line_correction, skip: [:trailing_comments] ++ @end_fields)
-      )
-
-    {quoted, state}
-  end
-
-  defp postwalk_correct_lines(quoted, state) do
-    {quoted, state}
+  def prewalk(quoted, acc, fun) do
+    Sourceror.Traversal.traverse(quoted, acc, fun, &{&1, &2})
   end
 
   @doc """
@@ -260,7 +234,7 @@ defmodule Sourceror do
   `:end_of_expression` line numbers of the node metadata if such fields are
   present.
   """
-  @spec correct_lines(Macro.t() | Macro.metadata(), integer, Macro.metadata()) ::
+  @spec correct_lines(Macro.t() | Macro.metadata(), integer, keyword) ::
           Macro.t() | Macro.metadata()
   def correct_lines(meta, line_correction, opts \\ [])
 
